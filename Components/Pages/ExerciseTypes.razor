@@ -1,0 +1,143 @@
+@page "/exercise-types"
+@attribute [Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject ChangeNotifier Notifier
+@implements IDisposable
+
+<PageTitle>Typy ćwiczeń</PageTitle>
+
+<h1>Typy ćwiczeń</h1>
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="StartAdd" disabled="@(form is not null)">Dodaj typ</button>
+</div>
+
+@if (message is not null)
+{
+    <div class="alert alert-warning">@message</div>
+}
+
+@if (form is not null && form.Id == 0)
+{
+    <div class="mb-3">
+        <ExerciseTypeForm Model="form" OnSave="SaveAsync" OnCancel="Close"/>
+    </div>
+}
+
+
+<table class="table align-middle">
+    <thead>
+        <tr><th>Nazwa</th><th></th></tr>
+    </thead>
+    <tbody>
+        @foreach (var type in types)
+        {
+            <tr @key="type.Id">
+                @if (form is not null && form.Id == type.Id)
+                {
+                    <td colspan="2"><ExerciseTypeForm Model="form" OnSave="SaveAsync" OnCancel="Close" /></td>
+                }
+                else if (deletingId == type.Id)
+                {
+                    <td>Usunąć "@type.Name"?</td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(type.Id)">Usuń</button>
+                        <button class="btn btn-sm btn-secondary" @onclick="Close">Anuluj</button>
+                    </td>
+                }
+                else
+                {
+                    <td>@type.Name</td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-outline-primary" @onclick="() => StartEdit(type)">Edytuj</button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => StartDelete(type.Id)">Usuń</button>
+
+                    </td>
+                }
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<ExerciseType> types = [];
+    private ExerciseType? form;
+    private int? deletingId;
+    private string? message;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    protected override void OnInitialized() => Notifier.ExerciseTypesChanged += OnExerciseTypesChanged;
+
+    private void OnExerciseTypesChanged() => _ = InvokeAsync(async () => 
+    {
+        await LoadAsync();
+        StateHasChanged();
+    });
+
+    public void Dispose() => Notifier.ExerciseTypesChanged -= OnExerciseTypesChanged;
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        types = await db.ExerciseTypes.OrderBy(t => t.Name).ToListAsync();
+    }
+
+        private void StartAdd()
+        {
+            Close();
+            form = new ExerciseType();
+        }
+
+        private void StartEdit(ExerciseType type)
+        {
+            Close();
+            form = new ExerciseType {Id = type.Id, Name = type.Name};
+        }
+
+        private void StartDelete(int id)
+        {
+            Close();
+            deletingId = id;
+        }
+
+        private void Close()
+        {
+            form = null;
+            deletingId = null;
+            message = null;
+        }
+
+        private async Task SaveAsync (ExerciseType type)
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (type.Id == 0)
+            {
+                db.ExerciseTypes.Add(type);
+            }
+            else
+            {
+                db.ExerciseTypes.Update(type);
+            }
+            await db.SaveChangesAsync();
+            Notifier.NotifyExerciseTypesChanged();
+            Close();
+            await LoadAsync();
+        }
+
+        private async Task DeleteAsync(int id)
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            if (await db.Exercises.AnyAsync(e => e.ExerciseTypeId == id))
+            {
+                Close();
+                message = "Tego typu nie można usunąć - są ćwiczenia które go używają";
+                return;
+            }
+            await db.ExerciseTypes.Where(t => t.Id == id).ExecuteDeleteAsync();
+            Notifier.NotifyExerciseTypesChanged();
+            Close();
+            await LoadAsync();
+        }
+}

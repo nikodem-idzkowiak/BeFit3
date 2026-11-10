@@ -1,0 +1,155 @@
+@page "/sessions"
+@attribute [Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject ChangeNotifier Notifier
+@implements IDisposable
+
+
+<PageTitle>Sesje treningowe</PageTitle>
+
+<h1>Sesje treningowe</h1>
+
+@if (form is null)
+{
+ <button class="btn btn-primary mb-3" @onclick="StartAdd">Nowa sesja</button>
+}
+else
+{
+ <SessionForm Model="form" OnSave="SaveAsync" OnCancel="Close" />
+}
+
+
+<table class="table align-middle">
+    <thead>
+    <tr><th>Początek</th><th>Koniec</th><th>Czas</th>
+    <th>Ćwiczenia</th><th></th></tr>
+    </thead>
+    <tbody>
+        @foreach (var session in sessions)
+        {
+            <tr @key="session.Id">
+                <td>@session.Start.ToString("dd.MM.yyyy HH:mm")</td>
+                <td>@session.End.ToString("HH:mm")</td>
+                <td>@((session.End - session.Start).ToString("h\\:mm"))</td>
+                <td>@session.Exercises.Count</td>
+
+                <td class="text-end">
+                    @if (deletingId == session.Id)
+                    {
+                        <span class="me-2">Usunąć sesję razem z ćwiczeniami?</span>
+                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(session.Id)">Usuń</button>
+                        <button class="btn btn-sm btn-secondary" @onclick="Close">Anuluj</button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-sm btn-outline-primary" @onclick="() => StartEdit(session)">Edytuj</button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => StartDelete(session.Id)">Usuń</button>
+                    }
+                </td>
+            </tr>
+        }
+
+    </tbody>
+</table>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+    private string userId = "";
+    private List<Session> sessions = [];
+    private SessionFormDto? form;
+    private int editingId;
+    private int? deletingId;
+    protected override async Task OnInitializedAsync()
+    {
+        userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        await LoadAsync();
+    }
+
+    protected override void OnInitialized() => Notifier.UserDataChanged += OnUserDataChanged;
+
+    private void OnUserDataChanged(string changedUserId)
+    {
+        if (changedUserId == userId)
+        {
+            _ = InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                StateHasChanged();
+            });
+        }
+    }
+    public void Dispose() => Notifier.UserDataChanged -= OnUserDataChanged;
+    // Only the logged-in user's sessions - the newest first.
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        sessions = await db.Sessions
+            .Where(s => s.CreatedById == userId)
+            .Include(s => s.Exercises)
+            .OrderByDescending(s => s.Start)
+            .ToListAsync();
+    }
+    private void StartAdd()
+    {
+        Close();
+        var start = DateTime.Today.AddHours(DateTime.Now.Hour);
+        form = new SessionFormDto {Start = start, End = start.AddHours(1)};
+    }
+    private void StartEdit(Session session)
+    {
+        Close();
+        editingId = session.Id;
+        form = new SessionFormDto { Start = session.Start, End =
+        session.End };
+    }
+
+    private void StartDelete(int id)
+    {
+        Close();
+        deletingId = id;
+    }
+
+    private void Close()
+    {
+        form = null;
+        editingId = 0;
+        deletingId = null;
+    }
+
+    private async Task SaveAsync(SessionFormDto dto)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var session = editingId == 0
+            ? db.Sessions.Add(new Session { CreatedById = userId }).Entity
+            : await db.Sessions.SingleOrDefaultAsync(s => s.Id == editingId && s.CreatedById == userId);
+        if (session is not null)
+        {
+            session.Start = dto.Start;
+            session.End = dto.End;
+            await db.SaveChangesAsync();
+            Notifier.NotifyUserDataChanged(userId);
+
+        }
+ 
+        Close();
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var session = await db.Sessions.Include(s => s.Exercises)
+            .SingleOrDefaultAsync(s => s.Id == id && s.CreatedById == userId);
+        if (session is not null)
+        {
+            db.Sessions.Remove(session);
+            await db.SaveChangesAsync();
+            Notifier.NotifyUserDataChanged(userId);
+
+        }
+        Close();
+        await LoadAsync();
+ }
+
+}

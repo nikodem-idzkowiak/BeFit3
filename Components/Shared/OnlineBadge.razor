@@ -1,0 +1,12 @@
+@inject OnlineUsers OnlineUsers
+@implements IDisposable
+
+<span class="badge text-bg-success" title="@string.Join(", ", OnlineUsers.Names)">Online: @OnlineUsers.Names.Count</span>
+
+@code {
+    protected override void OnInitialized() => OnlineUsers.Changed += OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => OnlineUsers.Changed -= OnChanged;
+}

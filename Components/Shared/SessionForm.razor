@@ -1,0 +1,29 @@
+<EditForm Model="Model" OnValidSubmit="() => OnSave.InvokeAsync(Model)" class="card card-body mb-3">
+    <DataAnnotationsValidator />
+    <div class="row g-2">
+        <div class="col-sm-5">
+            <label class="form-label">Początek</label>
+            <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="Model.Start" class="form-control" />
+            </div>
+            <div class="col-sm-5">
+                <label class="form-label">Koniec</label>
+                <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="Model.End" class="form-control" />
+                <ValidationMessage For="() => Model.End" />
+                </div>
+            </div>
+            <div class="mt-2">
+                <button type="submit" class="btn btn-success">Zapisz</button>
+                <button type="button" class="btn btn-secondary" @onclick="OnCancel">Anuluj</button>
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired]
+    public SessionFormDto Model {get; set;} = default!;
+
+    [Parameter]
+    public EventCallback<SessionFormDto> OnSave {get; set;}
+
+    [Parameter]
+    public EventCallback OnCancel {get; set;}
+}

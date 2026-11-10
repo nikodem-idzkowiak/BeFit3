@@ -1,0 +1,22 @@
+<EditForm Model="Model" OnValidSubmit="() => OnSave.InvokeAsync(Model)" class="row g-2 align-items-start">
+    <DataAnnotationsValidator />
+    <div class="col-sm-8">
+        <InputText @bind-Value="Model.Name" class="form-control" placeholder="Nazwa typu" />
+        <ValidationMessage For="() => Model.Name" />
+    </div>
+    <div class="col-sm-4">
+        <button type="submit" class="btn btn-success">Zapisz</button>
+        <button type="button" class="btn btn-secondary" @onclick="OnCancel">Anuluj</button>
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired]
+    public ExerciseType Model {get; set;} = default!;
+
+    [Parameter]
+    public EventCallback<ExerciseType> OnSave {get; set;}
+
+    [Parameter]
+    public EventCallback OnCancel {get; set;}
+}
